@@ -1,0 +1,28 @@
+[package]
+name = "webhook-service"
+version = "1.0.0"
+edition = "2024"
+description = "Webhook test service for WebhookUI-CLI"
+authors = ["WebhookUI-CLI Team"]
+license = "MIT"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros", "multipart", "tracing"] }
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+panic = "abort"     # Abort on panic (reduces binary size)
+strip = true        # Remove symbols from binary
