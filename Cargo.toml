@@ -2,8 +2,8 @@
 name = "webhook-service"
 version = "1.0.0"
 edition = "2024"
-description = "Webhook test service for WebhookUI-CLI"
-authors = ["WebhookUI-CLI Team"]
+description = "Webhook test service"
+authors = ["Oleksii Rodionov"]
 license = "MIT"
 
 [dependencies]

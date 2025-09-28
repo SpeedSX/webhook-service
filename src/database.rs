@@ -1,6 +1,7 @@
 use anyhow::Result;
-use sqlx::{sqlite::SqlitePool, Row};
+use sqlx::{sqlite::{SqlitePool, SqliteConnectOptions}, Row};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use crate::models::{MessageObject, TokenInfo, WebhookRequest};
 
@@ -19,12 +20,16 @@ impl Database {
             std::fs::create_dir_all(parent)?;
         }
         
-        // Convert to string with proper escaping for SQLite connection string
-        // mode=rwc creates the database if it doesn't exist
-        let db_url = format!("sqlite:{}?mode=rwc", db_path.to_string_lossy());
+        // Convert to string for SQLite connection
+        let db_url = format!("sqlite:{}", db_path.to_string_lossy());
+        
+        // Create connection options with foreign key enforcement and auto-creation
+        let options = SqliteConnectOptions::from_str(&db_url)?
+            .create_if_missing(true)
+            .foreign_keys(true);
         
         // Create the database connection
-        let pool = SqlitePool::connect(&db_url).await?;
+        let pool = SqlitePool::connect_with(options).await?;
         
         // Create tables
         sqlx::query(
@@ -111,17 +116,19 @@ impl Database {
     }
 
     pub async fn delete_token(&self, token: &str) -> Result<()> {
-        // Delete associated webhook requests first
+        let mut tx = self.pool.begin().await?;
+
         sqlx::query("DELETE FROM webhook_requests WHERE token_id = ?")
             .bind(token)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
 
-        // Delete the token
         sqlx::query("DELETE FROM tokens WHERE token = ?")
             .bind(token)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }

@@ -103,6 +103,7 @@ class WebhookService {
                 </div>
                 <div class="token-actions">
                     <button class="btn btn-secondary" onclick="webhookService.selectToken('${token.token}')">Select</button>
+                    <button class="btn btn-info" onclick="webhookService.copyCommand('${token.token}')" title="Copy monitoring command">📋 Command</button>
                     <button class="btn btn-danger" onclick="webhookService.deleteToken('${token.token}')">Delete</button>
                 </div>
             </div>
@@ -124,6 +125,16 @@ class WebhookService {
             document.getElementById('selected-token-logs').value = token;
             this.loadLogs();
         }
+    }
+
+    copyCommand(token) {
+        const command = `webhook monitor --token ${token}`;
+        navigator.clipboard.writeText(command).then(() => {
+            this.showMessage('Command copied to clipboard!', 'success');
+        }).catch(err => {
+            console.error('Failed to copy command:', err);
+            this.showMessage('Failed to copy command. Please copy manually: ' + command, 'error');
+        });
     }
 
     async sendWebhook() {

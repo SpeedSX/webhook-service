@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, Method, StatusCode, Uri},
-    response::{Html, Json},
+    response::{Html, Json, Response},
     routing::{get, post, delete},
     Router,
 };
@@ -19,9 +19,42 @@ mod models;
 use database::Database;
 use models::{WebhookRequest, MessageObject, TokenInfo};
 
+/// Generate webhook URL based on configuration or request headers
+fn generate_webhook_url(
+    base_url: &Option<String>,
+    _uri: &Uri,
+    headers: &HeaderMap,
+    token: &str,
+) -> String {
+    // First try to use configured BASE_URL
+    if let Some(configured_base) = base_url {
+        let normalized_base = configured_base.trim_end_matches('/');
+        return format!("{}/{}", normalized_base, token);
+    }
+    
+    // Fallback: extract from request headers and URI
+    if let Some(host) = headers.get("host").and_then(|h| h.to_str().ok()) {
+        // Determine scheme (default to http for localhost, https otherwise)
+        let scheme = if host.starts_with("localhost") || host.starts_with("127.0.0.1") {
+            "http"
+        } else {
+            "https"
+        };
+        
+        let base = format!("{}://{}", scheme, host);
+        let normalized_base = base.trim_end_matches('/');
+        return format!("{}/{}", normalized_base, token);
+    }
+    
+    // Final fallback - should rarely be used
+    warn!("Could not determine base URL from config or request, using default");
+    format!("http://localhost:3000/{}", token)
+}
+
 #[derive(Clone)]
 pub struct AppState {
     db: Arc<Database>,
+    base_url: Option<String>,
 }
 
 #[tokio::main]
@@ -32,7 +65,15 @@ async fn main() -> anyhow::Result<()> {
     // Initialize database
     let db = Arc::new(Database::new().await?);
     
-    let app_state = AppState { db };
+    // Read base URL from environment variable
+    let base_url = std::env::var("BASE_URL").ok();
+    if let Some(ref url) = base_url {
+        info!("Using configured BASE_URL: {}", url);
+    } else {
+        info!("No BASE_URL configured, will derive from request headers");
+    }
+    
+    let app_state = AppState { db, base_url };
 
     // Build the application
     let app = Router::new()
@@ -152,12 +193,20 @@ async fn webhook_handler(
     })))
 }
 
-async fn create_token(State(state): State<AppState>) -> Result<Json<TokenInfo>, StatusCode> {
+async fn create_token(
+    State(state): State<AppState>,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Result<Json<TokenInfo>, StatusCode> {
     let token = Uuid::new_v4();
+    
+    // Generate webhook URL based on configuration or request
+    let webhook_url = generate_webhook_url(&state.base_url, &uri, &headers, &token.to_string());
+    
     let token_info = TokenInfo {
         token: token.to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
-        webhook_url: format!("http://localhost:3000/{}", token),
+        webhook_url,
     };
 
     if let Err(e) = state.db.create_token(&token_info).await {
@@ -209,10 +258,22 @@ async fn web_interface() -> Html<&'static str> {
     Html(include_str!("web_interface.html"))
 }
 
-async fn static_files(Path(path): Path<String>) -> Result<&'static str, StatusCode> {
+async fn static_files(Path(path): Path<String>) -> Result<Response<String>, StatusCode> {
     match path.as_str() {
-        "style.css" => Ok(include_str!("style.css")),
-        "script.js" => Ok(include_str!("script.js")),
+        "style.css" => {
+            let content = include_str!("style.css").to_string();
+            Ok(Response::builder()
+                .header("content-type", "text/css; charset=utf-8")
+                .body(content)
+                .unwrap())
+        },
+        "script.js" => {
+            let content = include_str!("script.js").to_string();
+            Ok(Response::builder()
+                .header("content-type", "application/javascript; charset=utf-8")
+                .body(content)
+                .unwrap())
+        },
         _ => Err(StatusCode::NOT_FOUND),
     }
 }

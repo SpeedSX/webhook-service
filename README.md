@@ -6,7 +6,6 @@ A web service that provides webhook testing capabilities and a web interface for
 
 - **Webhook Reception**: Accepts HTTP requests at `/{token}` endpoints
 - **Request Storage**: Stores incoming webhook requests with full metadata
-- **CLI Compatibility**: Provides the exact API that WebhookUI-CLI expects
 - **Web Interface**: User-friendly web UI for testing and monitoring
 - **Token Management**: Generate, list, and delete webhook tokens
 - **Real-time Logs**: View webhook request logs through the web interface
@@ -41,7 +40,7 @@ A web service that provides webhook testing capabilities and a web interface for
 3. **Access the Web Interface**:
    Open http://localhost:3000 in your browser
 
-4. **Use with WebhookUI-CLI**:
+4. **Use with Webhook CLI**:
    ```bash
    # Update your CLI config to point to this service
    # In config.toml or config.local.toml:
@@ -54,7 +53,7 @@ A web service that provides webhook testing capabilities and a web interface for
    webhook monitor --token <your-token>
    ```
 
-## Usage with WebhookUI-CLI
+## Usage with Webhook CLI
 
 1. **Update CLI Configuration**:
    Edit `config.toml` or `config.local.toml` in your CLI project:
@@ -97,22 +96,6 @@ The service runs on `0.0.0.0:3000` by default. To change the port or host, modif
 let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
 ```
 
-## Development
-
-### Project Structure
-```
-webhook-service/
-├── src/
-│   ├── main.rs              # Main application and routes
-│   ├── models.rs            # Data models (compatible with CLI)
-│   ├── database.rs          # Database operations
-│   ├── web_interface.html   # Web interface HTML
-│   ├── style.css           # Web interface styles
-│   └── script.js           # Web interface JavaScript
-├── Cargo.toml              # Dependencies
-└── README.md               # This file
-```
-
 ### Building
 ```bash
 cargo build --release
@@ -123,14 +106,6 @@ cargo build --release
 cargo run
 ```
 
-## Compatibility
-
-This service is designed to work seamlessly with the WebhookUI-CLI tool. It implements the exact API structure that the CLI expects:
-
-- Webhook requests are stored with the same data structure
-- The logs endpoint returns data in the format expected by the CLI
-- All field names and data types match the CLI's models
-
 ## License
 
-MIT License - same as the WebhookUI-CLI project.
+MIT License.
