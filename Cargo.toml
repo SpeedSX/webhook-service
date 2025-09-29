@@ -5,6 +5,9 @@ edition = "2024"
 description = "Webhook test service"
 authors = ["Oleksii Rodionov"]
 license = "MIT"
+repository = "https://github.com/SpeedSX/webhook-service"
+homepage = "https://github.com/SpeedSX/webhook-service"
+readme = "README.md"
 
 [dependencies]
 axum = { version = "0.8", features = ["macros", "multipart", "tracing"] }

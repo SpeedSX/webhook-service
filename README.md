@@ -38,7 +38,7 @@ A web service that provides webhook testing capabilities and a web interface for
    ```
 
 3. **Access the Web Interface**:
-   Open http://localhost:3000 in your browser
+   Open <http://localhost:3000> in your browser
 
 4. **Use with Webhook CLI**:
    ```bash
@@ -94,6 +94,11 @@ The service runs on `0.0.0.0:3000` by default. To change the port or host, modif
 
 ```rust
 let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+```
+
+You can also set a public base URL (for generated webhook links) via:
+```bash
+bash +export BASE_URL="https://your.domain.example" +
 ```
 
 ### Building

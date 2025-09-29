@@ -33,22 +33,26 @@ fn generate_webhook_url(
     }
     
     // Fallback: extract from request headers and URI
-    if let Some(host) = headers.get("host").and_then(|h| h.to_str().ok()) {
-        // Determine scheme (default to http for localhost, https otherwise)
-        let scheme = if host.starts_with("localhost") || host.starts_with("127.0.0.1") {
-            "http"
-        } else {
-            "https"
-        };
-        
-        let base = format!("{}://{}", scheme, host);
-        let normalized_base = base.trim_end_matches('/');
-        return format!("{}/{}", normalized_base, token);
-    }
-    
-    // Final fallback - should rarely be used
-    warn!("Could not determine base URL from config or request, using default");
-    format!("http://localhost:3000/{}", token)
+    // Prefer forwarded headers set by proxies/CDNs
+    let fwd_proto = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok());
+    let fwd_host  = headers.get("x-forwarded-host").and_then(|v| v.to_str().ok());
+    let (scheme, host) = match (fwd_proto, fwd_host) {
+        (Some(proto), Some(h)) => (proto, h),
+        _ => {
+            let host = headers.get("host").and_then(|h| h.to_str().ok());
+            let host = host.unwrap_or("localhost:3000");
+            let scheme = if host.starts_with("localhost") || host.starts_with("127.0.0.1") {
+                "http"
+            } else {
+                "https"
+            };
+            (scheme, host)
+        }
+    };
+
+    let base = format!("{}://{}", scheme, host);
+    let normalized_base = base.trim_end_matches('/');
+    return format!("{}/{}", normalized_base, token);
 }
 
 #[derive(Clone)]
@@ -75,6 +79,9 @@ async fn main() -> anyhow::Result<()> {
     
     let app_state = AppState { db, base_url };
 
+    // Clone base_url for logging after app_state is moved
+    let base_url_for_log = app_state.base_url.clone();
+
     // Build the application
     let app = Router::new()
         // Web interface first (more specific routes)
@@ -99,9 +106,12 @@ async fn main() -> anyhow::Result<()> {
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-    info!("Webhook service running on http://0.0.0.0:3000");
-    info!("Web interface available at http://localhost:3000");
-    
+    if let Some(ref url) = base_url_for_log {
+        info!("Web interface available at: {}", url);
+    } else {
+        info!("No BASE_URL set; Web interface available at http://localhost:3000");
+    }
+
     axum::serve(listener, app).await?;
     
     Ok(())
@@ -148,7 +158,11 @@ async fn webhook_handler(
         header_map.entry(key_str).or_insert_with(Vec::new).push(value_str);
     }
 
-    // Parse body
+    // Parse body with a basic size cap (1 MiB)
+    if body.len() > 1_048_576 {
+        warn!("Request body too large: {} bytes", body.len());
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
     let body_str = String::from_utf8(body.to_vec()).unwrap_or_default();
     let body_object = if body_str.is_empty() {
         None
@@ -245,6 +259,7 @@ async fn get_webhook_logs(
     State(state): State<AppState>,
     Path((token, count)): Path<(String, u32)>,
 ) -> Result<Json<Vec<WebhookRequest>>, StatusCode> {
+    let count = count.min(1000);
     match state.db.get_webhook_requests(&token, count).await {
         Ok(requests) => Ok(Json(requests)),
         Err(e) => {

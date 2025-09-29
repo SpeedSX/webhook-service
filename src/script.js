@@ -112,10 +112,14 @@ class WebhookService {
 
     updateTokenDropdowns() {
         const logsDropdown = document.getElementById('selected-token-logs');
+        const current = logsDropdown.value;
         logsDropdown.innerHTML = '<option value="">Select a token to view logs</option>' +
             this.tokens.map(token => 
                 `<option value="${token.token}">${token.token}</option>`
             ).join('');
+        if (current && this.tokens.some(t => t.token === current)) {
+            logsDropdown.value = current;
+        }            
     }
 
     selectToken(token) {
@@ -129,10 +133,11 @@ class WebhookService {
 
     copyCommand(token) {
         const command = `webhook monitor --token ${token}`;
-        navigator.clipboard.writeText(command).then(() => {
+        (navigator.clipboard?.writeText ? navigator.clipboard.writeText(command) : Promise.reject())
+        .then(() => {
             this.showMessage('Command copied to clipboard!', 'success');
         }).catch(err => {
-            console.error('Failed to copy command:', err);
+            if (err) console.error('Failed to copy command:', err);
             this.showMessage('Failed to copy command. Please copy manually: ' + command, 'error');
         });
     }
@@ -157,13 +162,15 @@ class WebhookService {
             const requestOptions = {
                 method: method,
                 headers: {
-                    'Content-Type': 'application/json',
                     ...customHeaders
                 }
             };
 
             if (body.trim() && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
                 requestOptions.body = body;
+                if (!('Content-Type' in requestOptions.headers)) {
+                    requestOptions.headers['Content-Type'] = 'application/json';
+                }
             }
 
             const response = await fetch(url, requestOptions);
@@ -185,7 +192,9 @@ class WebhookService {
 
     async loadLogs() {
         const token = document.getElementById('selected-token-logs').value;
-        const count = document.getElementById('log-count').value;
+        let count = parseInt(document.getElementById('log-count').value, 10);
+        if (!Number.isFinite(count) || count <= 0) count = 50;
+        count = Math.min(count, 1000);
 
         if (!token) {
             document.getElementById('logs-container').innerHTML = '<div class="loading">Select a token to view logs</div>';
@@ -218,14 +227,14 @@ class WebhookService {
         container.innerHTML = logs.map(log => `
             <div class="log-item">
                 <div class="log-header">
-                    <span class="log-method method-${log.MessageObject.Method.toLowerCase()}">${log.MessageObject.Method}</span>
-                    <span class="log-id">ID: ${log.Id}</span>
-                    <span class="log-timestamp">${new Date(log.Date).toLocaleString()}</span>
+                    <span class="log-method method-${this.escapeHtml(log.MessageObject.Method.toLowerCase())}">${this.escapeHtml(log.MessageObject.Method)}</span>
+                    <span class="log-id">ID: ${this.escapeHtml(log.Id)}</span>
+                    <span class="log-timestamp">${this.escapeHtml(new Date(log.Date).toLocaleString())}</span>
                 </div>
                 <div class="log-details">
-                    <div class="log-url">${log.MessageObject.Value}</div>
+                    <div class="log-url">${this.escapeHtml(log.MessageObject.Value)}</div>
                     ${log.MessageObject.Body ? `
-                        <div class="log-body">${this.formatJson(log.MessageObject.Body)}</div>
+                        <div class="log-body"><pre>${this.formatJson(log.MessageObject.Body)}</pre></div>
                     ` : ''}
                     ${Object.keys(log.MessageObject.Headers).length > 0 ? `
                         <div class="log-headers">
@@ -238,19 +247,33 @@ class WebhookService {
         `).join('');
     }
 
+    escapeHtml(str) {
+        if (typeof str !== 'string') {
+            str = String(str);
+        }
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/\//g, '&#x2F;')
+            .replace(/`/g, '&#x60;');
+    }
+
     formatJson(str) {
         try {
             const obj = JSON.parse(str);
-            return JSON.stringify(obj, null, 2);
+            return this.escapeHtml(JSON.stringify(obj, null, 2));
         } catch {
-            return str;
+            return this.escapeHtml(str);
         }
     }
 
     formatHeaders(headers) {
-        return Object.entries(headers)
+        return this.escapeHtml(Object.entries(headers)
             .map(([key, values]) => `${key}: ${values.join(', ')}`)
-            .join('\n');
+            .join('\n'));
     }
 
     showMessage(message, type) {
