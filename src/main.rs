@@ -1,9 +1,9 @@
 use axum::{
+    Router,
     extract::{Path, State},
-    http::{header, HeaderMap, Method, StatusCode, Uri},
+    http::{HeaderMap, Method, StatusCode, Uri, header},
     response::{Html, Json, Response},
     routing::{delete, get, post},
-    Router,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,37 +11,33 @@ use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
-use uuid::Uuid;
 use url::form_urlencoded;
+use uuid::Uuid;
 
 mod database;
 mod models;
 
 use database::Database;
-use models::{WebhookRequest, MessageObject, TokenInfo};
+use models::{MessageObject, TokenInfo, WebhookRequest};
 
 /// Generate webhook URL based on configuration or request headers
-fn generate_webhook_url(
-    base_url: &Option<String>,
-    _uri: &Uri,
-    headers: &HeaderMap,
-    token: &str,
-) -> String {
+fn generate_webhook_url(base_url: &Option<String>, headers: &HeaderMap, token: &str) -> String {
     // First try to use configured BASE_URL
     if let Some(configured_base) = base_url {
         let normalized_base = configured_base.trim_end_matches('/');
         return format!("{}/{}", normalized_base, token);
     }
-    
+
     // Fallback: extract from request headers and URI
     // Prefer forwarded headers set by proxies/CDNs
     let first = |name: &str| {
-        headers.get(name)
+        headers
+            .get(name)
             .and_then(|v| v.to_str().ok())
             .map(|s| s.split(',').next().unwrap_or("").trim())
     };
     let fwd_proto = first("x-forwarded-proto");
-    let fwd_host  = first("x-forwarded-host");
+    let fwd_host = first("x-forwarded-host");
     let (scheme, host) = match (fwd_proto, fwd_host) {
         (Some(proto), Some(h)) if matches!(proto, "http" | "https") && !h.is_empty() => (proto, h),
         _ => {
@@ -74,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize database
     let db = Arc::new(Database::new().await?);
-    
+
     // Read base URL from environment variable
     let base_url = std::env::var("BASE_URL").ok();
     if let Some(ref url) = base_url {
@@ -82,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
     } else {
         info!("No BASE_URL configured, will derive from request headers");
     }
-    
+
     let app_state = AppState { db, base_url };
 
     // Clone base_url for logging after app_state is moved
@@ -111,19 +107,30 @@ async fn main() -> anyhow::Result<()> {
                     if std::env::var("CORS_PERMISSIVE").is_ok() {
                         CorsLayer::permissive()
                     } else {
+                        use axum::http::HeaderValue;
                         let allowed = std::env::var("CORS_ALLOWED_ORIGINS")
                             .unwrap_or_else(|_| "http://localhost:3000".into());
+                        let origins: Vec<HeaderValue> = allowed
+                            .split(',')
+                            .filter_map(|s| match s.trim().parse() {
+                                Ok(v) => Some(v),
+                                Err(e) => {
+                                    warn!("Ignoring invalid origin '{}': {e}", s.trim());
+                                    None
+                                }
+                            })
+                            .collect();
                         CorsLayer::new()
-                            .allow_origin(
-                                allowed
-                                    .split(',')
-                                    .map(|s| s.trim().parse().unwrap())
-                                    .collect::<Vec<_>>()
-                            )
-                            .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+                            .allow_origin(origins)
+                            .allow_methods([
+                                Method::GET,
+                                Method::POST,
+                                Method::DELETE,
+                                Method::OPTIONS,
+                            ])
                             .allow_headers([header::CONTENT_TYPE])
                     }
-                })
+                }),
         )
         .with_state(app_state);
 
@@ -140,7 +147,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     axum::serve(listener, app).await?;
-    
+
     Ok(())
 }
 
@@ -154,10 +161,10 @@ async fn webhook_handler(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract token from path parameters
     let token = params.get("token").ok_or(StatusCode::BAD_REQUEST)?;
-    
+
     // Validate token format (should be a UUID)
     let token_uuid = Uuid::parse_str(token).map_err(|_| StatusCode::BAD_REQUEST)?;
-    
+
     // Verify token exists in the database
     match state.db.token_exists(token).await {
         Ok(exists) if !exists => return Err(StatusCode::NOT_FOUND),
@@ -167,13 +174,15 @@ async fn webhook_handler(
         }
         _ => {} // Token exists, continue
     }
-    
+
     // Parse query parameters
     let query_params: Vec<String> = uri
         .query()
-        .map(|q| form_urlencoded::parse(q.as_bytes())
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect())
+        .map(|q| {
+            form_urlencoded::parse(q.as_bytes())
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect()
+        })
         .unwrap_or_default();
 
     // Convert headers to the expected format
@@ -181,7 +190,10 @@ async fn webhook_handler(
     for (key, value) in headers.iter() {
         let key_str = key.as_str().to_string();
         let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
-        header_map.entry(key_str).or_insert_with(Vec::new).push(value_str);
+        header_map
+            .entry(key_str)
+            .or_insert_with(Vec::new)
+            .push(value_str);
     }
 
     // Parse body with a basic size cap (1 MiB)
@@ -206,7 +218,11 @@ async fn webhook_handler(
             value: uri.to_string(),
             headers: header_map,
             query_parameters: query_params,
-            body: if body_str.is_empty() { None } else { Some(body_str) },
+            body: if body_str.is_empty() {
+                None
+            } else {
+                Some(body_str)
+            },
             body_object,
         },
         message: None,
@@ -220,9 +236,7 @@ async fn webhook_handler(
 
     info!(
         "Received {} request for token {}: {}",
-        method,
-        token,
-        webhook_request.id
+        method, token, webhook_request.id
     );
 
     // Return a simple response
@@ -235,14 +249,13 @@ async fn webhook_handler(
 
 async fn create_token(
     State(state): State<AppState>,
-    uri: Uri,
     headers: HeaderMap,
 ) -> Result<Json<TokenInfo>, StatusCode> {
     let token = Uuid::new_v4();
-    
+
     // Generate webhook URL based on configuration or request
-    let webhook_url = generate_webhook_url(&state.base_url, &uri, &headers, &token.to_string());
-    
+    let webhook_url = generate_webhook_url(&state.base_url, &headers, &token.to_string());
+
     let token_info = TokenInfo {
         token: token.to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
@@ -306,14 +319,15 @@ async fn static_files(Path(path): Path<String>) -> Result<Response<String>, Stat
             Response::builder()
                 .header("content-type", "text/css; charset=utf-8")
                 .body(content)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)        },
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        }
         "script.js" => {
             let content = include_str!("script.js").to_string();
             Response::builder()
                 .header("content-type", "application/javascript; charset=utf-8")
                 .body(content)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-        },
+        }
         _ => Err(StatusCode::NOT_FOUND),
     }
 }

@@ -1,5 +1,8 @@
 use anyhow::Result;
-use sqlx::{sqlite::{SqlitePool, SqliteConnectOptions}, Row};
+use sqlx::{
+    Row,
+    sqlite::{SqliteConnectOptions, SqlitePool},
+};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -14,12 +17,12 @@ impl Database {
         // Get current directory and create database path
         let current_dir = std::env::current_dir()?;
         let db_path = current_dir.join("webhook_service.db");
-        
+
         // Ensure the directory exists and is writable
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         // Create connection options with concurrency-friendly settings
         let options = SqliteConnectOptions::new()
             .filename(&db_path)
@@ -27,10 +30,10 @@ impl Database {
             .foreign_keys(true)
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
             .busy_timeout(Duration::from_secs(5));
-        
+
         // Create the database connection
         let pool = SqlitePool::connect_with(options).await?;
-        
+
         // Create tables
         sqlx::query(
             r#"
@@ -69,30 +72,32 @@ impl Database {
             .execute(&pool)
             .await?;
 
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_webhook_requests_date ON webhook_requests (date)")
-            .execute(&pool)
-            .await?;
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_webhook_requests_date ON webhook_requests (date)",
+        )
+        .execute(&pool)
+        .await?;
 
         Ok(Self { pool })
     }
 
     pub async fn create_token(&self, token_info: &TokenInfo) -> Result<()> {
-        sqlx::query(
-            "INSERT INTO tokens (token, created_at, webhook_url) VALUES (?, ?, ?)",
-        )
-        .bind(&token_info.token)
-        .bind(&token_info.created_at)
-        .bind(&token_info.webhook_url)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT INTO tokens (token, created_at, webhook_url) VALUES (?, ?, ?)")
+            .bind(&token_info.token)
+            .bind(&token_info.created_at)
+            .bind(&token_info.webhook_url)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
 
     pub async fn list_tokens(&self) -> Result<Vec<TokenInfo>> {
-        let rows = sqlx::query("SELECT token, created_at, webhook_url FROM tokens ORDER BY created_at DESC")
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(
+            "SELECT token, created_at, webhook_url FROM tokens ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         let tokens = rows
             .into_iter()
@@ -136,7 +141,10 @@ impl Database {
     pub async fn store_webhook_request(&self, request: &WebhookRequest) -> Result<()> {
         let headers_json = serde_json::to_string(&request.message_object.headers)?;
         let query_params_json = serde_json::to_string(&request.message_object.query_parameters)?;
-        let body_object_json = request.message_object.body_object.as_ref()
+        let body_object_json = request
+            .message_object
+            .body_object
+            .as_ref()
             .map(|obj| serde_json::to_string(obj))
             .transpose()?;
 
@@ -163,7 +171,11 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_webhook_requests(&self, token: &str, count: u32) -> Result<Vec<WebhookRequest>> {
+    pub async fn get_webhook_requests(
+        &self,
+        token: &str,
+        count: u32,
+    ) -> Result<Vec<WebhookRequest>> {
         let rows = sqlx::query(
             r#"
             SELECT id, date, token_id, method, value, headers, query_parameters, body, body_object, message
