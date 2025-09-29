@@ -192,7 +192,7 @@ async fn webhook_handler(
         let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
         header_map
             .entry(key_str)
-            .or_default(Vec::new)
+            .or_default()
             .push(value_str);
     }
 
