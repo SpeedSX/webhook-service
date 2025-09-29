@@ -145,7 +145,7 @@ impl Database {
             .message_object
             .body_object
             .as_ref()
-            .map(|obj| serde_json::to_string(obj))
+            .map(serde_json::to_string)
             .transpose()?;
 
         sqlx::query(

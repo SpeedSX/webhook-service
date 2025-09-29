@@ -54,7 +54,7 @@ fn generate_webhook_url(base_url: &Option<String>, headers: &HeaderMap, token: &
 
     let base = format!("{}://{}", scheme, host);
     let normalized_base = base.trim_end_matches('/');
-    return format!("{}/{}", normalized_base, token);
+    format!("{}/{}", normalized_base, token)
 }
 
 #[derive(Clone)]
@@ -192,7 +192,7 @@ async fn webhook_handler(
         let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
         header_map
             .entry(key_str)
-            .or_insert_with(Vec::new)
+            .or_default(Vec::new)
             .push(value_str);
     }
 
