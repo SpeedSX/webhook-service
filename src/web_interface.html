@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webhook Test Service</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="page-title">
+            <h1>Webhook Test Service</h1>
+        </div>
+
+        <main>
+            <section class="token-section">
+                <h2>Token Management</h2>
+                <div class="token-controls">
+                    <button id="create-token" class="btn btn-primary">Create New Token</button>
+                    <button id="refresh-tokens" class="btn btn-secondary">Refresh List</button>
+                </div>
+                
+                <div id="token-list" class="token-list">
+                    <!-- Tokens will be loaded here -->
+                </div>
+            </section>
+
+            <section class="webhook-section">
+                <h2>Webhook Testing</h2>
+                <div class="webhook-tester">
+                    <div class="form-group">
+                        <label for="webhook-url">Webhook URL:</label>
+                        <input type="text" id="webhook-url" placeholder="Select a token above to get the webhook URL">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="http-method">HTTP Method:</label>
+                        <select id="http-method">
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                            <option value="PATCH">PATCH</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="request-body">Request Body (JSON):</label>
+                        <textarea id="request-body" rows="6" placeholder='{"key": "value", "message": "Hello from webhook test!"}'></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="custom-headers">Custom Headers (JSON):</label>
+                        <textarea id="custom-headers" rows="3" placeholder='{"Content-Type": "application/json", "X-Custom-Header": "test-value"}'></textarea>
+                    </div>
+
+                    <button id="send-webhook" class="btn btn-success">Send Webhook</button>
+                </div>
+            </section>
+
+            <section class="logs-section">
+                <h2>Recent Webhook Logs</h2>
+                <div class="logs-controls">
+                    <select id="selected-token-logs">
+                        <option value="">Select a token to view logs</option>
+                    </select>
+                    <input type="number" id="log-count" value="10" min="1" max="100" placeholder="Count">
+                    <button id="load-logs" class="btn btn-secondary">Load Logs</button>
+                </div>
+                
+                <div id="logs-container" class="logs-container">
+                    <!-- Logs will be displayed here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
