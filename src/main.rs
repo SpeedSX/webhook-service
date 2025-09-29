@@ -190,10 +190,7 @@ async fn webhook_handler(
     for (key, value) in headers.iter() {
         let key_str = key.as_str().to_string();
         let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
-        header_map
-            .entry(key_str)
-            .or_default()
-            .push(value_str);
+        header_map.entry(key_str).or_default().push(value_str);
     }
 
     // Parse body with a basic size cap (1 MiB)
