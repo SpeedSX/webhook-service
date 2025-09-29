@@ -12,6 +12,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing::{info, warn};
 use uuid::Uuid;
+use url::form_urlencoded;
 
 mod database;
 mod models;
@@ -34,10 +35,15 @@ fn generate_webhook_url(
     
     // Fallback: extract from request headers and URI
     // Prefer forwarded headers set by proxies/CDNs
-    let fwd_proto = headers.get("x-forwarded-proto").and_then(|v| v.to_str().ok());
-    let fwd_host  = headers.get("x-forwarded-host").and_then(|v| v.to_str().ok());
+    let first = |name: &str| {
+        headers.get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or("").trim())
+    };
+    let fwd_proto = first("x-forwarded-proto");
+    let fwd_host  = first("x-forwarded-host");
     let (scheme, host) = match (fwd_proto, fwd_host) {
-        (Some(proto), Some(h)) => (proto, h),
+        (Some(proto), Some(h)) if matches!(proto, "http" | "https") && !h.is_empty() => (proto, h),
         _ => {
             let host = headers.get("host").and_then(|h| h.to_str().ok());
             let host = host.unwrap_or("localhost:3000");
@@ -121,7 +127,12 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(app_state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    let bind = std::env::var("BIND_ADDR")
+        .or_else(|_| std::env::var("PORT").map(|p| format!("0.0.0.0:{p}")))
+        .unwrap_or_else(|_| "0.0.0.0:3000".to_string());
+    let listener = tokio::net::TcpListener::bind(&bind).await?;
+    info!("Listening on {}", bind);
+
     if let Some(ref url) = base_url_for_log {
         info!("Web interface available at: {}", url);
     } else {
@@ -160,17 +171,16 @@ async fn webhook_handler(
     // Parse query parameters
     let query_params: Vec<String> = uri
         .query()
-        .unwrap_or("")
-        .split('&')
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect();
+        .map(|q| form_urlencoded::parse(q.as_bytes())
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect())
+        .unwrap_or_default();
 
     // Convert headers to the expected format
     let mut header_map: HashMap<String, Vec<String>> = HashMap::new();
     for (key, value) in headers.iter() {
         let key_str = key.as_str().to_string();
-        let value_str = value.to_str().unwrap_or("").to_string();
+        let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
         header_map.entry(key_str).or_insert_with(Vec::new).push(value_str);
     }
 
