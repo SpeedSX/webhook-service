@@ -1,4 +1,6 @@
 # Webhook Test Service
+[![Rust](https://github.com/SpeedSX/webhook-cli/actions/workflows/rust.yml/badge.svg)](https://github.com/SpeedSX/webhook-service/actions/workflows/rust.yml)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/SpeedSX/webhook-service)
 
 A web service that provides webhook testing capabilities and a web interface for monitoring webhook requests.
 
