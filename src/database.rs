@@ -1,7 +1,7 @@
 use anyhow::Result;
 use sqlx::{sqlite::{SqlitePool, SqliteConnectOptions}, Row};
 use std::collections::HashMap;
-use std::str::FromStr;
+use std::time::Duration;
 
 use crate::models::{MessageObject, TokenInfo, WebhookRequest};
 
@@ -20,13 +20,13 @@ impl Database {
             std::fs::create_dir_all(parent)?;
         }
         
-        // Convert to string for SQLite connection
-        let db_url = format!("sqlite:{}", db_path.to_string_lossy());
-        
-        // Create connection options with foreign key enforcement and auto-creation
-        let options = SqliteConnectOptions::from_str(&db_url)?
+        // Create connection options with concurrency-friendly settings
+        let options = SqliteConnectOptions::new()
+            .filename(&db_path)
             .create_if_missing(true)
-            .foreign_keys(true);
+            .foreign_keys(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .busy_timeout(Duration::from_secs(5));
         
         // Create the database connection
         let pool = SqlitePool::connect_with(options).await?;

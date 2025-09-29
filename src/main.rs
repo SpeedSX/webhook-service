@@ -1,8 +1,8 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, Method, StatusCode, Uri},
+    http::{header, HeaderMap, Method, StatusCode, Uri},
     response::{Html, Json, Response},
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Router,
 };
 use std::collections::HashMap;
@@ -101,7 +101,23 @@ async fn main() -> anyhow::Result<()> {
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
-                .layer(CorsLayer::permissive())
+                .layer({
+                    if std::env::var("CORS_PERMISSIVE").is_ok() {
+                        CorsLayer::permissive()
+                    } else {
+                        let allowed = std::env::var("CORS_ALLOWED_ORIGINS")
+                            .unwrap_or_else(|_| "http://localhost:3000".into());
+                        CorsLayer::new()
+                            .allow_origin(
+                                allowed
+                                    .split(',')
+                                    .map(|s| s.trim().parse().unwrap())
+                                    .collect::<Vec<_>>()
+                            )
+                            .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+                            .allow_headers([header::CONTENT_TYPE])
+                    }
+                })
         )
         .with_state(app_state);
 
@@ -277,17 +293,16 @@ async fn static_files(Path(path): Path<String>) -> Result<Response<String>, Stat
     match path.as_str() {
         "style.css" => {
             let content = include_str!("style.css").to_string();
-            Ok(Response::builder()
+            Response::builder()
                 .header("content-type", "text/css; charset=utf-8")
                 .body(content)
-                .unwrap())
-        },
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)        },
         "script.js" => {
             let content = include_str!("script.js").to_string();
-            Ok(Response::builder()
+            Response::builder()
                 .header("content-type", "application/javascript; charset=utf-8")
                 .body(content)
-                .unwrap())
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
         },
         _ => Err(StatusCode::NOT_FOUND),
     }

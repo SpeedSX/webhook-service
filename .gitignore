@@ -27,6 +27,8 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 webhook_service.db
+*.db-shm
+*.db-wal
 
 # Logs
 *.log
