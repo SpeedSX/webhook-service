@@ -141,7 +141,7 @@ async fn webhook_handler(
         .webhook_service
         .process_webhook(
             token,
-            &method.to_string(),
+            method.as_ref(),
             &uri.to_string(),
             header_map,
             query_params,
