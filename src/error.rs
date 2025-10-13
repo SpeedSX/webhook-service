@@ -59,7 +59,7 @@ impl IntoResponse for AppError {
             }
             AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found".into()),
             AppError::CommonFileNotFound(path) => (
-                StatusCode::NOT_FOUND, 
+                StatusCode::NOT_FOUND,
                 format!("Common browser file not found: {}", path).into()
             ),
         };
