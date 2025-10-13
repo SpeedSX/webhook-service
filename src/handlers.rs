@@ -170,14 +170,7 @@ async fn create_token(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> std::result::Result<Json<TokenInfo>, AppError> {
-    // Convert headers to framework-agnostic format
-    let mut header_map: HashMap<String, Vec<String>> = HashMap::new();
-    for (key, value) in headers.iter() {
-        let key_str = key.as_str().to_string();
-        let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
-        header_map.entry(key_str).or_default().push(value_str);
-    }
-
+    let header_map = convert_headers(&headers);
     let token_info = state.token_service.create_token(&header_map).await?;
     Ok(Json(token_info))
 }
@@ -238,4 +231,14 @@ async fn static_files(Path(path): Path<String>) -> std::result::Result<Response<
         }
         _ => Err(AppError::NotFound),
     }
+}
+
+fn convert_headers(headers: &HeaderMap) -> HashMap<String, Vec<String>> {
+    let mut header_map: HashMap<String, Vec<String>> = HashMap::new();
+    for (key, value) in headers.iter() {
+        let key_str = key.as_str().to_string();
+        let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
+        header_map.entry(key_str).or_default().push(value_str);
+    }
+    header_map
 }
