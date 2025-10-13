@@ -34,6 +34,9 @@ pub enum AppError {
 
     #[error("Resource not found")]
     NotFound,
+
+    #[error("Common browser file not found: {0}")]
+    CommonFileNotFound(String),
 }
 
 impl IntoResponse for AppError {
@@ -54,6 +57,7 @@ impl IntoResponse for AppError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
             }
             AppError::NotFound => (StatusCode::NOT_FOUND, "Resource not found"),
+            AppError::CommonFileNotFound(_) => (StatusCode::NOT_FOUND, "Common browser file not found"),
         };
 
         tracing::warn!("Error occurred: {}", self);

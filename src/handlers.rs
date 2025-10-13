@@ -24,20 +24,29 @@ pub struct AppState {
     pub token_service: TokenService,
 }
 
+/// Extension trait for Router to add common file routes
+trait RouterExt {
+    fn add_common_file(self, file: &'static str) -> Self;
+}
+
+impl RouterExt for Router<AppState> {
+    fn add_common_file(self, file: &'static str) -> Self {
+        self.route(
+            &format!("/{}", file),
+            any(move |uri: Uri| not_found_handler_with_path(uri, file)),
+        )
+    }
+}
+
 pub fn create_router(app_state: AppState, config: &Config) -> Router {
     Router::new()
         // Web interface first (more specific routes)
         .route("/", get(web_interface))
         .route("/static/{*path}", get(static_files))
-        // Common browser files that should return 404
-        .route(
-            "/favicon.ico",
-            get(|uri: Uri| not_found_handler_with_path(uri, "favicon.ico")),
-        )
-        .route(
-            "/robots.txt",
-            get(|uri: Uri| not_found_handler_with_path(uri, "robots.txt")),
-        )
+        .add_common_file("favicon.ico")
+        .add_common_file("robots.txt")
+        .add_common_file("sitemap.xml")
+        .add_common_file("manifest.json")
         // API routes
         .route("/api/tokens", post(create_token))
         .route("/api/tokens", get(list_tokens))
@@ -90,16 +99,6 @@ async fn webhook_handler(
 ) -> std::result::Result<Json<serde_json::Value>, AppError> {
     // Extract token from path parameters
     let token = params.get("token").ok_or(AppError::InvalidToken)?;
-
-    // Quick check for common browser-requested files to avoid unnecessary UUID parsing
-    let common_files = ["favicon.ico", "robots.txt", "sitemap.xml", "manifest.json"];
-    if common_files.contains(&token.as_str()) {
-        tracing::debug!(
-            "Browser file request detected in webhook handler: '{}'",
-            token
-        );
-        return Err(AppError::NotFound);
-    }
 
     // Validate token format (should be a UUID)
     Uuid::parse_str(token).map_err(|e| {
@@ -171,7 +170,15 @@ async fn create_token(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> std::result::Result<Json<TokenInfo>, AppError> {
-    let token_info = state.token_service.create_token(&headers).await?;
+    // Convert headers to framework-agnostic format
+    let mut header_map: HashMap<String, Vec<String>> = HashMap::new();
+    for (key, value) in headers.iter() {
+        let key_str = key.as_str().to_string();
+        let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
+        header_map.entry(key_str).or_default().push(value_str);
+    }
+
+    let token_info = state.token_service.create_token(&header_map).await?;
     Ok(Json(token_info))
 }
 
@@ -210,7 +217,7 @@ async fn not_found_handler_with_path(
     resource: &str,
 ) -> std::result::Result<Json<serde_json::Value>, AppError> {
     tracing::debug!("Browser requested common file: {}", resource);
-    Err(AppError::NotFound)
+    Err(AppError::CommonFileNotFound(resource.to_string()))
 }
 
 async fn static_files(Path(path): Path<String>) -> std::result::Result<Response<String>, AppError> {
