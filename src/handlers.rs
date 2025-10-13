@@ -117,12 +117,7 @@ async fn webhook_handler(
         .unwrap_or_default();
 
     // Convert headers to the expected format
-    let mut header_map: HashMap<String, Vec<String>> = HashMap::new();
-    for (key, value) in headers.iter() {
-        let key_str = key.as_str().to_string();
-        let value_str = String::from_utf8_lossy(value.as_bytes()).to_string();
-        header_map.entry(key_str).or_default().push(value_str);
-    }
+    let header_map = convert_headers(&headers);
 
     // Parse body with a basic size cap (1 MiB)
     if body.len() > 1_048_576 {
