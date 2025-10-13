@@ -103,7 +103,7 @@ class WebhookService {
                 </div>
                 <div class="token-actions">
                     <button class="btn btn-secondary" onclick="webhookService.selectToken('${token.token}')">Select</button>
-                    <button class="btn btn-info" onclick="webhookService.copyCommand('${token.token}')" title="Copy monitoring command">📋 Command</button>
+                    <button class="btn btn-info" onclick="webhookService.copyCommand('${token.token}')" title="Copy monitoring command">📋 CLI Command</button>
                     <button class="btn btn-danger" onclick="webhookService.deleteToken('${token.token}')">Delete</button>
                 </div>
             </div>

@@ -10,7 +10,7 @@ use crate::models::{MessageObject, TokenInfo, WebhookRequest};
 /// Generate webhook URL based on configuration or request headers
 pub fn generate_webhook_url(
     base_url: &Option<String>,
-    headers: &axum::http::HeaderMap,
+    headers: &HashMap<String, Vec<String>>,
     token: &str,
 ) -> String {
     // First try to use configured BASE_URL
@@ -24,7 +24,7 @@ pub fn generate_webhook_url(
     let first = |name: &str| {
         headers
             .get(name)
-            .and_then(|v| v.to_str().ok())
+            .and_then(|values| values.first())
             .map(|s| s.split(',').next().unwrap_or("").trim())
     };
     let fwd_proto = first("x-forwarded-proto");
@@ -32,8 +32,8 @@ pub fn generate_webhook_url(
     let (scheme, host) = match (fwd_proto, fwd_host) {
         (Some(proto), Some(h)) if matches!(proto, "http" | "https") && !h.is_empty() => (proto, h),
         _ => {
-            let host = headers.get("host").and_then(|h| h.to_str().ok());
-            let host = host.unwrap_or("localhost:3000");
+            let host = headers.get("host").and_then(|values| values.first());
+            let host = host.map(|s| s.as_str()).unwrap_or("localhost:3000");
             let scheme = if host.starts_with("localhost") || host.starts_with("127.0.0.1") {
                 "http"
             } else {
@@ -58,6 +58,7 @@ impl WebhookService {
         Self { db }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn process_webhook(
         &self,
         token: &str,
@@ -68,16 +69,6 @@ impl WebhookService {
         body: Option<String>,
         body_object: Option<serde_json::Value>,
     ) -> Result<String, AppError> {
-        // Quick check for common browser-requested files to avoid unnecessary UUID parsing
-        let common_files = ["favicon.ico", "robots.txt", "sitemap.xml", "manifest.json"];
-        if common_files.contains(&token) {
-            warn!(
-                "Browser file request detected in webhook processing: '{}' - returning 404",
-                token
-            );
-            return Err(AppError::NotFound);
-        }
-
         // Validate token format (should be a UUID)
         Uuid::parse_str(token).map_err(|e| {
             warn!(
@@ -159,7 +150,7 @@ impl TokenService {
 
     pub async fn create_token(
         &self,
-        headers: &axum::http::HeaderMap,
+        headers: &HashMap<String, Vec<String>>,
     ) -> Result<TokenInfo, AppError> {
         let token = Uuid::new_v4();
 
