@@ -69,7 +69,6 @@ impl WebhookService {
         body: Option<String>,
         body_object: Option<serde_json::Value>,
     ) -> Result<String, AppError> {
-
         // Validate token format (should be a UUID)
         Uuid::parse_str(token).map_err(|e| {
             warn!(
